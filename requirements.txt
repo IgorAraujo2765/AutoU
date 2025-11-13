@@ -4,3 +4,4 @@ nltk
 scikit-learn
 openai
 werkzeug
+pdfplumber
