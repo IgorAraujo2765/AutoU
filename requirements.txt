@@ -5,3 +5,4 @@ scikit-learn
 openai
 werkzeug
 pdfplumber
+pytesseract
