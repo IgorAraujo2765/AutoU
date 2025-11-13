@@ -1,5 +1,16 @@
 # app.py
 # Backend Flask para receber arquivo/texto, pré-processar, classificar e gerar resposta.
+
+import nltk
+
+# Baixa os pacotes necessários em tempo de execução, se não existirem
+nltk_packages = ['punkt', 'stopwords']
+for pkg in nltk_packages:
+    try:
+        nltk.data.find(f'tokenizers/{pkg}')
+    except LookupError:
+        nltk.download(pkg, quiet=True)
+
 import nltk
 nltk.download('punkt', quiet=True)
 from flask import Flask, request, render_template, jsonify
