@@ -1,5 +1,7 @@
 # app.py
 # Backend Flask para receber arquivo/texto, pré-processar, classificar e gerar resposta.
+import nltk
+nltk.download('punkt', quiet=True)
 from flask import Flask, request, render_template, jsonify
 import os, re
 from pathlib import Path
@@ -18,6 +20,7 @@ try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
     nltk.download('punkt')
+
 
 # NLP: NLTK
 import nltk
