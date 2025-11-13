@@ -1,78 +1,43 @@
 # app.py
 # Backend Flask para receber arquivo/texto, pré-processar, classificar e gerar resposta.
 
-import nltk
-nltk.data.path.append('./nltk_data')
-
-import nltk
-
-# Baixa os pacotes necessários em tempo de execução, se não existirem
-nltk_packages = ['punkt', 'stopwords']
-for pkg in nltk_packages:
-    try:
-        nltk.data.find(f'tokenizers/{pkg}')
-    except LookupError:
-        nltk.download(pkg, quiet=True)
-
-import nltk
-nltk.download('punkt', quiet=True)
 from flask import Flask, request, render_template, jsonify
-import os, re
+from flask_cors import CORS
 from pathlib import Path
 from werkzeug.utils import secure_filename
+import os, re
 
-from flask import Flask
-from flask_cors import CORS
-
-app = Flask(__name__)
-CORS(app)
-
-import nltk
-
-# Garante que punkt esteja instalado
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
-
-
-# NLP: NLTK
-import nltk
-from nltk.corpus import stopwords
-from nltk.stem import SnowballStemmer
-
-try:
-    import textract_trp as textract
-except Exception:
-    textract = None
+import pdfplumber
+from PIL import Image
+import pytesseract
 
 try:
     import openai
 except Exception:
     openai = None
 
-import pdfplumber
-from PIL import Image
-import pytesseract
-
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.naive_bayes import MultinomialNB
-
 app = Flask(__name__)
+CORS(app)
+
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5 MB
 UPLOAD_FOLDER = Path('uploads')
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 app.config['UPLOAD_FOLDER'] = str(UPLOAD_FOLDER)
 
-nltk_packages = ['punkt', 'stopwords']
-for pkg in nltk_packages:
-    try:
-        nltk.data.find(f'tokenizers/{pkg}')
-    except LookupError:
-        nltk.download(pkg)
+# Lista fixa de stopwords (PT + EN)
+STOPWORDS = set([
+    "de", "a", "o", "que", "e", "do", "da", "em", "um", "para", "com",
+    "no", "na", "os", "as", "um", "uma", "uns", "umas", "por", "como",
+    "the", "and", "is", "in", "to", "of", "for", "on", "with", "at", "by"
+])
 
-STOPWORDS = set(stopwords.words('portuguese')) | set(stopwords.words('english'))
-STEMMER = SnowballStemmer('portuguese')
+def preprocess_text(text: str) -> str:
+    text = re.sub(r'\s+', ' ', text)  # Remove múltiplos espaços
+    text = re.sub(r'[^\w\sÀ-ÿ]', ' ', text)  # Remove pontuação
+    text = text.lower()
+    tokens = re.findall(r'\b\w+\b', text)
+    tokens = [t for t in tokens if t not in STOPWORDS and len(t) > 2]
+    return ' '.join(tokens)
 
 TRAIN_TEXTS = [
     'Preciso de suporte no sistema, erro ao validar contrato',
@@ -84,58 +49,36 @@ TRAIN_TEXTS = [
 ]
 TRAIN_LABELS = ['Produtivo', 'Produtivo', 'Improdutivo', 'Improdutivo', 'Produtivo', 'Improdutivo']
 
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+
 vectorizer = TfidfVectorizer()
-X_train = vectorizer.fit_transform(TRAIN_TEXTS)
+X_train = vectorizer.fit_transform([preprocess_text(t) for t in TRAIN_TEXTS])
 clf = MultinomialNB()
 clf.fit(X_train, TRAIN_LABELS)
 
-def extract_text_from_pdf(filepath):
-    if textract is None:
-        return ''
-    text = textract.process(str(filepath))
-    if isinstance(text, bytes):
-        try:
-            text = text.decode('utf-8')
-        except Exception:
-            text = text.decode('latin-1', errors='ignore')
-    return text
-
 def extract_text_from_pdf_advanced(filepath):
-    """
-    Extrai texto de PDFs de forma robusta:
-    - Tenta primeiro extrair texto direto (pdfplumber)
-    - Se não houver texto, aplica OCR em cada página (imagem)
-    """
     text = ""
     try:
         with pdfplumber.open(filepath) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text()
-                if page_text and page_text.strip():
+                if page_text:
                     text += page_text + "\n"
 
-        
         if not text.strip():
+            # OCR
             with pdfplumber.open(filepath) as pdf:
                 for page in pdf.pages:
                     im = page.to_image(resolution=300).original
                     page_text = pytesseract.image_to_string(im, lang='por+eng')
-                    if page_text and page_text.strip():
+                    if page_text:
                         text += page_text + "\n"
 
     except Exception as e:
         print("Erro ao extrair PDF avançado:", e)
 
     return text.strip()
-
-def preprocess_text(text: str) -> str:
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'[^\w\sÀ-ÿ]', ' ', text)
-    text = text.lower()
-    tokens = nltk.word_tokenize(text, language='portuguese')
-    tokens = [t for t in tokens if t not in STOPWORDS and len(t) > 2]
-    stems = [STEMMER.stem(t) for t in tokens]
-    return ' '.join(stems)
 
 def classify_local(text):
     text = text.lower()
@@ -150,13 +93,11 @@ def classify_local(text):
         'feliz aniversário', 'parabéns', 'agradeço', 'saudações', 'tudo bem',
         'olá', 'oi'
     ]
-
     if any(word in text for word in keywords_produtivas):
         return 'Produtivo'
     elif any(word in text for word in keywords_improdutivas):
         return 'Improdutivo'
     else:
-        # fallback mais inteligente
         if len(text.split()) > 10:
             return 'Produtivo'
         else:
@@ -170,7 +111,7 @@ def classify_with_openai(text: str):
 Você é um classificador de e-mails corporativos.
 
 **Regras de classificação:**
-- "Produtivo": e-mails que contêm pedidos, tarefas, relatórios, reuniões, prazos, respostas, feedbacks, solicitações, dúvidas ou qualquer conteúdo que exija ação, decisão ou encaminhamento.
+- "Produtivo": e-mails que contêm pedidos, tarefas, relatórios, reuniões, prazos, respostas, feedbacks, solicitações, dúvidas ou qualquer conteúdo que exija ação.
 - "Improdutivo": e-mails apenas de agradecimento, cumprimentos, conversas casuais, notificações automáticas ou mensagens sem necessidade de ação.
 
 Analise o e-mail abaixo e responda SOMENTE com um JSON no formato exato:
@@ -191,18 +132,13 @@ E-MAIL:
         temperature=0.1,
     )
 
-    output_text = resp['choices'][0]['message']['content']
-
-    # 🔍 Exibe no console o que o modelo realmente retornou (para debug)
-    print("DEBUG OpenAI OUTPUT:", output_text)
-
     import json
     try:
-        parsed = json.loads(output_text)
+        parsed = json.loads(resp['choices'][0]['message']['content'])
         return parsed.get('category', 'Produtivo'), parsed.get('suggested_response', '')
     except Exception:
-        cat = 'Improdutivo' if 'Improdutivo' in output_text else 'Produtivo'
-        return cat, output_text
+        cat = 'Improdutivo' if 'Improdutivo' in resp else 'Produtivo'
+        return cat, resp
 
 @app.route('/')
 def index():
@@ -217,8 +153,7 @@ def classify_email():
         filepath = Path(app.config['UPLOAD_FOLDER']) / filename
         f.save(filepath)
         if filename.lower().endswith('.pdf'):
-             text = extract_text_from_pdf_advanced(filepath)
-             print("DEBUG PDF TEXT:", text[:500])
+            text = extract_text_from_pdf_advanced(filepath)
         else:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as fh:
                 text = fh.read()
@@ -229,7 +164,7 @@ def classify_email():
     elif 'text' in request.form:
         text = request.form['text']
 
-    if not text or len(text.strip()) == 0:
+    if not text.strip():
         return jsonify({'error': 'Nenhum conteúdo recebido.'}), 400
 
     preproc = preprocess_text(text)
@@ -244,7 +179,7 @@ def classify_email():
                 suggested = 'Olá,\n\nRecebemos sua solicitação e iremos analisá-la. Por favor, nos envie mais detalhes se houver.\n\nAtenciosamente,'
             else:
                 suggested = 'Olá,\n\nAgradecemos a sua mensagem! No momento não é necessária nenhuma ação.\n\nAtenciosamente,'
-    except Exception as e:
+    except Exception:
         category = classify_local(preproc)
         suggested = 'Erro no serviço externo; resposta gerada localmente.'
 
