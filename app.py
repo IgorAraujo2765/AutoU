@@ -11,6 +11,14 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
+import nltk
+
+# Garante que punkt esteja instalado
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
+
 # NLP: NLTK
 import nltk
 from nltk.corpus import stopwords
