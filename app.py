@@ -2,6 +2,9 @@
 # Backend Flask para receber arquivo/texto, pré-processar, classificar e gerar resposta.
 
 import nltk
+nltk.data.path.append('./nltk_data')
+
+import nltk
 
 # Baixa os pacotes necessários em tempo de execução, se não existirem
 nltk_packages = ['punkt', 'stopwords']
