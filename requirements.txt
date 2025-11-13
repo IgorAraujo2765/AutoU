@@ -1,0 +1,6 @@
+flask
+nltk
+scikit-learn
+openai
+textract
+werkzeug

@@ -1,0 +1,54 @@
+<!-- templates/index.html -->
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AutoU - Classificador de E-mails</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>AutoU — Classificador & Gerador de Respostas</h1>
+      <p class="subtitle">Envie um .txt/.pdf ou cole o texto do e-mail para receber classificação (Produtivo / Improdutivo) e uma sugestão de resposta.</p>
+    </header>
+
+    <main class="card">
+      <form id="emailForm" enctype="multipart/form-data" novalidate>
+        <div class="field">
+          <label for="fileInput">Upload do e-mail (.txt ou .pdf):</label>
+          <input type="file" id="fileInput" name="file" accept=".txt,.pdf" />
+        </div>
+
+        <div class="or">— ou —</div>
+
+        <div class="field">
+          <label for="textInput">Colar o texto do e-mail:</label>
+          <textarea id="textInput" name="text" rows="8" placeholder="Cole aqui o conteúdo do e-mail..."></textarea>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn">Enviar para Classificação</button>
+          <button type="button" id="clearBtn" class="btn ghost">Limpar</button>
+        </div>
+      </form>
+
+      <section id="results" class="results hidden" aria-live="polite">
+        <h2>Resultados</h2>
+        <p class="result-category"><strong>Categoria:</strong> {{ category }}</p>
+        <p class="result-response"><strong>Resposta sugerida:</strong> {{ response }}</p>
+        <p><strong>Categoria:</strong> <span id="category"></span></p>
+        <h3>Resposta sugerida</h3>
+        <div id="suggestedResponse" class="responseBox"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <small>Desenvolvido por Igor Araújo — AutoU</small>
+    </footer>
+  </div>
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>
